@@ -72,6 +72,7 @@ module pcie_us_axis_cq_demux #
     output wire [2:0]                                 bar_id,
     output wire [7:0]                                 msg_code,
     output wire [2:0]                                 msg_routing,
+    output reg  [2:0]                                 func_no,
 
     /*
      * Control
@@ -116,6 +117,7 @@ reg                                m_axis_cq_tready_int_reg = 1'b0;
 reg                                m_axis_cq_tlast_int;
 reg  [AXIS_PCIE_CQ_USER_WIDTH-1:0] m_axis_cq_tuser_int;
 wire                               m_axis_cq_tready_int_early;
+reg  [15:0]                        beat_count = 0;
 
 assign s_axis_cq_tready = (s_axis_cq_tready_reg || (AXIS_PCIE_DATA_WIDTH == 64 && !temp_s_axis_cq_tvalid_reg)) && enable;
 
@@ -123,9 +125,31 @@ assign req_type =        AXIS_PCIE_DATA_WIDTH > 64 ? s_axis_cq_tdata[78:75]   : 
 assign target_function = AXIS_PCIE_DATA_WIDTH > 64 ? s_axis_cq_tdata[111:104] : s_axis_cq_tdata[47:40];
 assign bar_id =          AXIS_PCIE_DATA_WIDTH > 64 ? s_axis_cq_tdata[114:112] : s_axis_cq_tdata[50:48];
 assign msg_code =        AXIS_PCIE_DATA_WIDTH > 64 ? s_axis_cq_tdata[111:104] : s_axis_cq_tdata[47:40];
-assign msg_routing =     AXIS_PCIE_DATA_WIDTH > 64 ? s_axis_cq_tdata[114:112] : s_axis_cq_tdata[50:48];
+assign msg_routing =     AXIS_PCIE_DATA_WIDTH > 64 ? s_axis_cq_tdata[114:112] : s_axis_cq_tdata[50:48];   
 
 integer i;
+
+always@(posedge clk)
+begin
+	if(s_axis_cq_tready & s_axis_cq_tvalid & !s_axis_cq_tlast) begin
+		beat_count <= beat_count + 1'b1;
+	end else if(s_axis_cq_tready & s_axis_cq_tvalid & s_axis_cq_tlast)  begin
+		beat_count <= 0;
+	end
+end
+
+always@(posedge clk)
+begin
+        if (AXIS_PCIE_DATA_WIDTH == 64) begin
+            if((beat_count == 16'b1) && (s_axis_cq_tready & s_axis_cq_tvalid)) begin
+                      func_no <= s_axis_cq_tdata[42:40];
+            end
+        end else begin
+            if((beat_count == 16'b0) && (s_axis_cq_tready & s_axis_cq_tvalid)) begin
+                      func_no <= s_axis_cq_tdata[106:104];
+            end
+        end
+end
 
 always @* begin
     select_next = select_reg;
